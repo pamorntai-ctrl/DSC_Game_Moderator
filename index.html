@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ภารกิจพิชิตแผ่นดิน</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: 'Sukhumvit Set', 'Prompt', 'Sarabun', 'Segoe UI', sans-serif;
+  background: #0d1b2a;
+  color: #eef;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+header {
+  background: #16213e;
+  padding: 10px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid #0f3460;
+  flex-shrink: 0;
+}
+header h1 {
+  font-size: 22px;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+.tabs { display: flex; gap: 8px; }
+.tab {
+  background: #0f3460;
+  color: #eef;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-family: inherit;
+  font-weight: 600;
+}
+.tab.active { background: #e94560; }
+.main { display: flex; flex: 1; overflow: hidden; }
+.map-area {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 30% 20%, #1c3057, #0d1b2a 70%);
+}
+.map-container {
+  position: relative;
+  display: inline-block;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 100%;
+  max-height: 100%;
+}
+.map-container img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 110px);
+  width: auto;
+  height: auto;
+}
+.grid-overlay, .markers-overlay, .path-overlay {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none;
+}
+.grid-overlay { pointer-events: auto; }
+.path-overlay { overflow: visible; z-index: 5; }
+.path-overlay path { transition: opacity 0.3s; }
+.path-overlay .step-num {
+  fill: white;
+  font-size: 22px;
+  font-weight: bold;
+  text-anchor: middle;
+  dominant-baseline: central;
+  paint-order: stroke;
+  stroke: rgba(0,0,0,0.8);
+  stroke-width: 4px;
+}
+.grid-cell {
+  position: absolute;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.15s;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+.grid-cell:hover { background: rgba(233, 69, 96, 0.25); border-color: rgba(255,255,255,0.5); }
+.grid-cell.show-borders { border-color: rgba(255, 80, 80, 0.45); }
+.grid-cell .terrain-tag {
+  position: absolute;
+  bottom: 1px; right: 1px;
+  font-size: 9px;
+  font-weight: bold;
+  background: rgba(255,255,255,0.85);
+  color: #000;
+  padding: 0 3px;
+  border-radius: 2px;
+  pointer-events: none;
+  line-height: 12px;
+}
+.grid-cell .cell-id-tag {
+  position: absolute;
+  top: 1px; left: 2px;
+  font-size: 8px;
+  font-weight: bold;
+  color: rgba(255,255,255,0.85);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+  pointer-events: none;
+}
+.marker {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  color: white;
+  text-shadow: 0 1px 1px rgba(0,0,0,0.8);
+  transition: top 0.7s cubic-bezier(0.4, 0, 0.2, 1),
+              left 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 10;
+  width: 26px;
+  height: 26px;
+}
+.marker.active {
+  box-shadow: 0 0 0 3px #fff, 0 0 0 5px #e94560, 0 4px 10px rgba(0,0,0,0.8);
+  z-index: 20;
+}
+
+.sidebar {
+  width: 360px;
+  background: #1b263b;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 2px solid #0f3460;
+  flex-shrink: 0;
+}
+.panel {
+  padding: 14px;
+  display: none;
+  overflow-y: auto;
+  flex: 1;
+}
+.panel.active { display: block; }
+.panel h2 {
+  font-size: 17px;
+  margin-bottom: 10px;
+  color: #fff;
+  border-bottom: 1px solid #0f3460;
+  padding-bottom: 6px;
+}
+.panel h3 {
+  font-size: 13px;
+  margin: 14px 0 6px;
+  color: #8aa;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.field-label {
+  font-size: 12px;
+  color: #aab;
+  margin-bottom: 4px;
+  display: block;
+}
+
+select, .move-controls input, .calibration input[type=number] {
+  width: 100%;
+  padding: 9px;
+  background: #0d1b2a;
+  border: 1px solid #0f3460;
+  color: white;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 14px;
+}
+select { margin-bottom: 10px; }
+
+.move-controls {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  align-items: stretch;
+}
+.move-controls input {
+  flex: 1;
+  font-size: 18px;
+  font-weight: bold;
+  text-align: center;
+  text-transform: uppercase;
+}
+.move-controls input.error { border-color: #e94560; }
+.move-controls button {
+  background: #e94560;
+  color: white;
+  border: none;
+  padding: 0 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: bold;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.move-controls button:hover { background: #c1334a; }
+
+.btn-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.btn-row button {
+  flex: 1;
+  background: #495874;
+  color: white;
+  border: none;
+  padding: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+}
+.btn-row button:hover { background: #5d6c8e; }
+
+.team-list { display: flex; flex-direction: column; gap: 4px; }
+.team-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: #0d1b2a;
+  border-radius: 4px;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+.team-row:hover { background: #14253d; }
+.team-row.active { border-color: #e94560; }
+.team-color {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 2px solid white;
+  flex-shrink: 0;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  color: white;
+}
+.team-name { flex: 1; font-weight: 600; font-size: 14px; }
+.team-stats { font-size: 11px; color: #aab; text-align: right; min-width: 88px; }
+.team-stats .pos { color: #fff; font-weight: bold; font-size: 14px; }
+.team-stats .pts-big {
+  color: #f1c40f;
+  font-weight: bold;
+  font-size: 20px;
+  line-height: 1;
+}
+.team-stats .pts-label {
+  color: #aab;
+  font-size: 10px;
+  margin-left: 2px;
+}
+.team-stats .steps { font-size: 11px; color: #8aa; margin-top: 2px; }
+
+.path-toggle {
+  background: #495874;
+  color: white;
+  border: 2px solid transparent;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-family: inherit;
+}
+.path-toggle.on { background: #2ecc71; border-color: #fff; }
+.path-toggle:hover { filter: brightness(1.15); }
+
+.terrain-palette {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+.terrain-palette button {
+  padding: 10px 6px;
+  border: 3px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  color: #111;
+  font-weight: bold;
+  text-align: left;
+}
+.terrain-palette button.active {
+  border-color: #e94560;
+  box-shadow: 0 0 0 2px #fff inset;
+}
+
+.calibration {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+.calibration label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.calibration label span.val {
+  width: 40px;
+  text-align: right;
+  font-family: monospace;
+  color: #f1c40f;
+}
+.calibration input[type=range] { flex: 1; }
+.calibration .checkbox-row { gap: 6px; }
+
+.config-team-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.config-team-row .team-color { width: 22px; height: 22px; }
+.config-team-row input {
+  flex: 1;
+  padding: 6px;
+  background: #0d1b2a;
+  border: 1px solid #0f3460;
+  color: white;
+  border-radius: 4px;
+  font-family: inherit;
+}
+.config-team-row button {
+  background: #c0392b;
+  color: white;
+  border: none;
+  padding: 6px 10px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.full-btn {
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px;
+  background: #0f3460;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: bold;
+  font-size: 13px;
+}
+.full-btn:hover { background: #16407a; }
+.full-btn.danger { background: #c0392b; }
+.full-btn.danger:hover { background: #e74c3c; }
+.full-btn.warn { background: #d68910; }
+
+.toast {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #16213e;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  z-index: 1000;
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+  font-weight: 600;
+  font-size: 16px;
+  max-width: 80%;
+  text-align: center;
+}
+.toast.show { opacity: 1; }
+.toast.error { background: #c0392b; }
+.toast.success { background: #16a085; }
+.toast.warn { background: #d68910; }
+
+.team-history {
+  max-height: 80px;
+  overflow-y: auto;
+  font-size: 11px;
+  color: #aab;
+  margin-top: 6px;
+  padding: 4px;
+  background: #0d1b2a;
+  border-radius: 4px;
+  line-height: 16px;
+}
+.team-history span {
+  display: inline-block;
+  margin: 1px 2px;
+  padding: 0 4px;
+  background: #16213e;
+  border-radius: 2px;
+  color: #fff;
+}
+
+.scoreboard-toggle {
+  position: absolute;
+  top: 16px; right: 16px;
+  background: rgba(13, 27, 42, 0.92);
+  border: 1px solid #0f3460;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  z-index: 50;
+  font-size: 13px;
+}
+.live-scoreboard {
+  position: absolute;
+  top: 60px; right: 16px;
+  background: rgba(13, 27, 42, 0.95);
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid #0f3460;
+  min-width: 220px;
+  max-width: 280px;
+  z-index: 40;
+  font-size: 13px;
+  display: none;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+}
+.live-scoreboard.show { display: block; }
+.live-scoreboard h4 {
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: #e94560;
+  text-align: center;
+}
+.live-scoreboard .row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.live-scoreboard .row:last-child { border-bottom: none; }
+.live-scoreboard .row .team-color { width: 14px; height: 14px; border-width: 1px; }
+.live-scoreboard .row .name { flex: 1; font-size: 13px; }
+.live-scoreboard .row .score { font-weight: bold; color: #f1c40f; }
+.live-scoreboard .row.winner .name { color: #2ecc71; font-weight: bold; }
+.live-scoreboard .row.winner .score { color: #2ecc71; }
+
+@media (max-width: 1100px) {
+  .sidebar { width: 320px; }
+  header h1 { font-size: 18px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>🌲 ภารกิจพิชิตแผ่นดิน 🌲</h1>
+  <div class="tabs">
+    <button class="tab active" data-tab="play">เล่นเกม</button>
+    <button class="tab" data-tab="setup">ตั้งค่า</button>
+  </div>
+</header>
+
+<div class="main">
+  <div class="map-area">
+    <div class="map-container">
+      <img id="bg" src="bg.jpg" alt="แผนที่">
+      <svg class="path-overlay" id="paths" viewBox="0 0 1800 1300" preserveAspectRatio="none"></svg>
+      <div class="grid-overlay" id="grid"></div>
+      <div class="markers-overlay" id="markers"></div>
+    </div>
+    <button class="scoreboard-toggle" id="sbToggle">📊 อันดับ</button>
+    <div class="live-scoreboard" id="liveScoreboard">
+      <h4>อันดับคะแนน (น้อยสุด = ชนะ)</h4>
+      <div id="sbBody"></div>
+    </div>
+  </div>
+
+  <aside class="sidebar">
+    <div class="panel active" id="playPanel">
+      <h2>เดินทาง</h2>
+      <label class="field-label">ทีมที่กำลังเดิน (active)</label>
+      <select id="teamSelect"></select>
+
+      <label class="field-label">พิมพ์ช่องที่ต้องการเดิน (เช่น A1, B5, M18)</label>
+      <div class="move-controls">
+        <input id="cellInput" placeholder="A1" maxlength="3" autocomplete="off">
+        <button id="moveBtn">เดิน ▶</button>
+      </div>
+
+      <div class="btn-row">
+        <button id="undoBtn">↶ ย้อนกลับ</button>
+        <button id="resetTeamBtn">⟲ รีเซ็ตทีมนี้</button>
+      </div>
+
+      <h3>ทีมทั้งหมด (คลิกเพื่อเลือก / 👁 = แสดงเส้นทาง)</h3>
+      <div class="btn-row" style="margin-bottom:6px;">
+        <button id="showAllPathsBtn">👁 แสดงเส้นทางทุกทีม</button>
+        <button id="hideAllPathsBtn">🚫 ซ่อนทั้งหมด</button>
+      </div>
+      <div class="team-list" id="teamList"></div>
+
+      <h3>ประวัติทีมที่เลือก</h3>
+      <div class="team-history" id="teamHistory"></div>
+    </div>
+
+    <div class="panel" id="setupPanel">
+      <h2>ตั้งค่าแผนที่</h2>
+
+      <h3>รีเซ็ตทีม (ใช้บ่อยตอนเริ่มรอบใหม่)</h3>
+      <button class="full-btn warn" id="resetAllTeamsBtn" style="background:#d68910;font-size:15px;padding:14px;">⟲ Reset All Teams (กลับ A1, ล้างคะแนน)</button>
+
+      <h3>1. กำหนด Terrain แต่ละช่อง</h3>
+      <p style="font-size:12px;color:#aab;margin-bottom:6px;">เลือก terrain แล้วคลิกที่ช่องบนแผนที่ (auto-detect ให้แล้วจาก bg.jpg)</p>
+      <div class="terrain-palette" id="terrainPalette"></div>
+      <div class="btn-row" style="margin-top:8px;">
+        <button id="restoreTerrainBtn" style="background:#16a085;color:white;">↻ ใช้ค่า auto-detect</button>
+        <button id="clearTerrainBtn" style="background:#c0392b;color:white;">ล้างทั้งหมด</button>
+      </div>
+
+      <h3>2. ปรับตำแหน่งกริด (% ของแผนที่)</h3>
+      <button class="full-btn" id="autoFitBtn" style="margin-bottom:8px;background:#16a085;">📐 ใช้ค่าเริ่มต้นสำหรับ bg.jpg</button>
+      <div class="calibration">
+        <label>บน: <input type="range" id="gridTop" min="0" max="40" value="14" step="0.2"> <span class="val" id="gridTopVal">14</span></label>
+        <label>ซ้าย: <input type="range" id="gridLeft" min="0" max="40" value="7" step="0.2"> <span class="val" id="gridLeftVal">7</span></label>
+        <label>กว้าง: <input type="range" id="gridWidth" min="20" max="90" value="58" step="0.2"> <span class="val" id="gridWidthVal">58</span></label>
+        <label>สูง: <input type="range" id="gridHeight" min="30" max="95" value="78" step="0.2"> <span class="val" id="gridHeightVal">78</span></label>
+        <label class="checkbox-row"><input type="checkbox" id="showBorders"> แสดงเส้นกริด (สำหรับ calibrate)</label>
+        <label class="checkbox-row"><input type="checkbox" id="showTerrainTags"> แสดงค่า terrain ในเกม</label>
+        <label class="checkbox-row"><input type="checkbox" id="showCellIds"> แสดงชื่อช่อง (A1, B2…)</label>
+      </div>
+
+      <h3>3. จัดการทีม</h3>
+      <div id="teamConfig"></div>
+      <button class="full-btn" id="addTeamBtn">+ เพิ่มทีม</button>
+
+      <h3>4. Save/Load</h3>
+      <button class="full-btn" id="exportBtn">⬇ Export เป็นไฟล์</button>
+      <button class="full-btn" id="importBtn">⬆ Import จากไฟล์</button>
+      <input type="file" id="importFile" accept=".json" style="display:none">
+
+      <h3>5. รีเซ็ตทั้งหมด</h3>
+      <button class="full-btn danger" id="resetAllBtn">⚠ รีเซ็ตทุกอย่าง (terrain + ทีม + ค่า)</button>
+    </div>
+  </aside>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const ROWS = 'ABCDEFGHIJKLM'.split('');
+const COLS_COUNT = 18;
+const START_CELL = 'A1';
+
+const TERRAINS = {
+  plain:    { name: 'พื้นราบ',    cost: 4, color: '#b5dd7a' },
+  forest:   { name: 'ป่า',        cost: 4, color: '#3e7c3a' },
+  mountain: { name: 'ภูเขา',      cost: 2, color: '#d4d4d4' },
+  water:    { name: 'น้ำ',        cost: 4, color: '#6fb8e6' },
+  desert:   { name: 'ทะเลทราย',   cost: 3, color: '#dcb87a' },
+  rock:     { name: 'หิน/ผา',     cost: 1, color: '#7a7a7a' },
+};
+
+const TEAM_COLORS = [
+  '#e74c3c', '#3498db', '#2ecc71', '#f1c40f',
+  '#e67e22', '#9b59b6', '#e91e63', '#1abc9c',
+  '#ff5722', '#795548', '#00bcd4', '#cddc39',
+];
+
+const STORAGE_KEY = 'pichit_phaen_din_v3';
+
+// Calibrated from actual bg.jpg pixel measurements (2410x1610)
+// Grid: top y=265, bottom y=1396 (height 1131), left x=193, width 1700
+const PRESET_GRID = { top: 16.5, left: 8.0, width: 70.5, height: 70.3 };
+
+// Auto-detected terrain map from bg.jpg (per-cell color classification)
+const DEFAULT_TERRAIN = {"A1":"mountain","A2":"plain","A3":"plain","A4":"water","A5":"water","A6":"mountain","A7":"mountain","A8":"mountain","A9":"mountain","A10":"mountain","A11":"mountain","A12":"plain","A13":"plain","A14":"plain","A15":"plain","A16":"water","A17":"plain","A18":"desert","B1":"plain","B2":"plain","B3":"water","B4":"plain","B5":"water","B6":"plain","B7":"water","B8":"mountain","B9":"mountain","B10":"plain","B11":"plain","B12":"plain","B13":"plain","B14":"plain","B15":"plain","B16":"plain","B17":"water","B18":"desert","C1":"plain","C2":"mountain","C3":"mountain","C4":"mountain","C5":"mountain","C6":"mountain","C7":"mountain","C8":"mountain","C9":"mountain","C10":"plain","C11":"plain","C12":"water","C13":"water","C14":"plain","C15":"plain","C16":"plain","C17":"plain","C18":"plain","D1":"plain","D2":"rock","D3":"rock","D4":"rock","D5":"mountain","D6":"plain","D7":"plain","D8":"plain","D9":"plain","D10":"plain","D11":"rock","D12":"water","D13":"water","D14":"water","D15":"plain","D16":"plain","D17":"plain","D18":"plain","E1":"plain","E2":"rock","E3":"rock","E4":"mountain","E5":"mountain","E6":"desert","E7":"desert","E8":"desert","E9":"desert","E10":"mountain","E11":"mountain","E12":"plain","E13":"plain","E14":"plain","E15":"plain","E16":"plain","E17":"plain","E18":"plain","F1":"forest","F2":"forest","F3":"forest","F4":"forest","F5":"forest","F6":"forest","F7":"plain","F8":"plain","F9":"mountain","F10":"mountain","F11":"plain","F12":"forest","F13":"plain","F14":"plain","F15":"plain","F16":"plain","F17":"plain","F18":"plain","G1":"forest","G2":"forest","G3":"forest","G4":"forest","G5":"forest","G6":"forest","G7":"plain","G8":"mountain","G9":"mountain","G10":"plain","G11":"desert","G12":"desert","G13":"plain","G14":"plain","G15":"rock","G16":"rock","G17":"rock","G18":"rock","H1":"plain","H2":"plain","H3":"plain","H4":"desert","H5":"desert","H6":"desert","H7":"desert","H8":"desert","H9":"mountain","H10":"plain","H11":"plain","H12":"plain","H13":"plain","H14":"rock","H15":"rock","H16":"rock","H17":"rock","H18":"rock","I1":"plain","I2":"rock","I3":"rock","I4":"rock","I5":"rock","I6":"plain","I7":"water","I8":"water","I9":"mountain","I10":"plain","I11":"plain","I12":"forest","I13":"water","I14":"plain","I15":"plain","I16":"plain","I17":"plain","I18":"plain","J1":"plain","J2":"plain","J3":"plain","J4":"mountain","J5":"plain","J6":"water","J7":"plain","J8":"mountain","J9":"mountain","J10":"plain","J11":"desert","J12":"plain","J13":"plain","J14":"water","J15":"water","J16":"plain","J17":"plain","J18":"plain","K1":"plain","K2":"mountain","K3":"rock","K4":"plain","K5":"water","K6":"plain","K7":"plain","K8":"plain","K9":"mountain","K10":"plain","K11":"desert","K12":"plain","K13":"plain","K14":"plain","K15":"plain","K16":"water","K17":"plain","K18":"plain","L1":"desert","L2":"desert","L3":"water","L4":"plain","L5":"forest","L6":"forest","L7":"plain","L8":"plain","L9":"plain","L10":"desert","L11":"desert","L12":"forest","L13":"plain","L14":"water","L15":"plain","L16":"plain","L17":"plain","L18":"plain","M1":"plain","M2":"plain","M3":"water","M4":"rock","M5":"rock","M6":"plain","M7":"desert","M8":"desert","M9":"desert","M10":"desert","M11":"plain","M12":"forest","M13":"plain","M14":"water","M15":"plain","M16":"plain","M17":"plain","M18":"mountain"};
+
+const DEFAULT_STATE = () => ({
+  terrain: { ...DEFAULT_TERRAIN },
+  teams: [],
+  activeTab: 'play',
+  selectedTerrain: 'plain',
+  grid: { ...PRESET_GRID },
+  showBorders: false,
+  showTerrainTags: false,
+  showCellIds: false,
+  showScoreboard: false,
+  activeTeamId: 1,
+  nextTeamId: 1,
+});
+
+let state = DEFAULT_STATE();
+
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+}
+function loadState() {
+  try {
+    const s = localStorage.getItem(STORAGE_KEY);
+    if (s) {
+      const loaded = JSON.parse(s);
+      state = { ...DEFAULT_STATE(), ...loaded };
+    }
+  } catch(e) {}
+}
+
+function initTeams(count = 9) {
+  state.teams = [];
+  for (let i = 0; i < count; i++) {
+    state.teams.push({
+      id: i + 1,
+      name: `ทีม ${i + 1}`,
+      color: TEAM_COLORS[i % TEAM_COLORS.length],
+      position: START_CELL,
+      history: [START_CELL],
+      points: 0,
+      showPath: false,
+    });
+  }
+  state.nextTeamId = count + 1;
+  state.activeTeamId = 1;
+}
+
+function parseCell(id) {
+  if (!id) return null;
+  const m = String(id).trim().toUpperCase().match(/^([A-M])(\d{1,2})$/);
+  if (!m) return null;
+  const row = m[1];
+  const col = parseInt(m[2], 10);
+  if (!ROWS.includes(row)) return null;
+  if (col < 1 || col > COLS_COUNT) return null;
+  return { row, col, rowIdx: ROWS.indexOf(row), id: row + col };
+}
+
+function buildGrid() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  for (let r = 0; r < ROWS.length; r++) {
+    for (let c = 1; c <= COLS_COUNT; c++) {
+      const id = ROWS[r] + c;
+      const cell = document.createElement('div');
+      cell.className = 'grid-cell';
+      cell.dataset.cellId = id;
+      const left = (c - 1) / COLS_COUNT * 100;
+      const top = r / ROWS.length * 100;
+      const w = 100 / COLS_COUNT;
+      const h = 100 / ROWS.length;
+      cell.style.left = left + '%';
+      cell.style.top = top + '%';
+      cell.style.width = w + '%';
+      cell.style.height = h + '%';
+      cell.title = id;
+      cell.addEventListener('click', () => onCellClick(id));
+      grid.appendChild(cell);
+    }
+  }
+}
+
+function onCellClick(id) {
+  if (state.activeTab === 'setup') {
+    state.terrain[id] = state.selectedTerrain;
+    saveState();
+    renderGrid();
+  } else {
+    const input = document.getElementById('cellInput');
+    input.value = id;
+    moveActiveTeam();
+  }
+}
+
+function moveActiveTeam() {
+  const input = document.getElementById('cellInput');
+  const raw = input.value.trim();
+  const parsed = parseCell(raw);
+  if (!parsed) {
+    input.classList.add('error');
+    showToast('ช่องไม่ถูกต้อง: ' + raw, 'error');
+    return;
+  }
+  input.classList.remove('error');
+  const team = state.teams.find(t => t.id === state.activeTeamId);
+  if (!team) { showToast('ยังไม่ได้เลือกทีม', 'error'); return; }
+
+  const terrain = state.terrain[parsed.id];
+  const cost = terrain ? TERRAINS[terrain].cost : 0;
+  team.history.push(parsed.id);
+  team.position = parsed.id;
+  team.points += cost;
+
+  saveState();
+  renderMarkers();
+  renderPaths();
+  renderTeamList();
+  renderScoreboard();
+  renderHistory();
+
+  if (!terrain) {
+    showToast(`${team.name} → ${parsed.id} (ยังไม่ตั้ง terrain, +0)`, 'warn');
+  } else {
+    const t = TERRAINS[terrain];
+    showToast(`${team.name} → ${parsed.id} • ${t.name} +${cost} = ${team.points} แต้ม`, 'success');
+  }
+  input.value = '';
+  input.focus();
+}
+
+function undoMove() {
+  const team = state.teams.find(t => t.id === state.activeTeamId);
+  if (!team || team.history.length <= 1) {
+    showToast('ไม่มีอะไรให้ย้อนกลับ', 'error');
+    return;
+  }
+  const lastCell = team.history.pop();
+  const terrain = state.terrain[lastCell];
+  const cost = terrain ? TERRAINS[terrain].cost : 0;
+  team.points = Math.max(0, team.points - cost);
+  team.position = team.history[team.history.length - 1];
+
+  saveState();
+  renderMarkers();
+  renderPaths();
+  renderTeamList();
+  renderScoreboard();
+  renderHistory();
+  showToast(`${team.name} ย้อนกลับมา ${team.position}`, 'success');
+}
+
+function resetTeam(teamId) {
+  const team = state.teams.find(t => t.id === teamId);
+  if (!team) return;
+  team.position = START_CELL;
+  team.history = [START_CELL];
+  team.points = 0;
+  saveState();
+  renderMarkers();
+  renderPaths();
+  renderTeamList();
+  renderScoreboard();
+  renderHistory();
+}
+
+function applyGridSize() {
+  const grid = document.getElementById('grid');
+  const markers = document.getElementById('markers');
+  const paths = document.getElementById('paths');
+  for (const el of [grid, markers, paths]) {
+    el.style.top = state.grid.top + '%';
+    el.style.left = state.grid.left + '%';
+    el.style.width = state.grid.width + '%';
+    el.style.height = state.grid.height + '%';
+  }
+}
+
+function renderGrid() {
+  applyGridSize();
+  const grid = document.getElementById('grid');
+  for (const cell of grid.children) {
+    const id = cell.dataset.cellId;
+    const terrain = state.terrain[id];
+    cell.classList.toggle('show-borders', state.showBorders || state.activeTab === 'setup');
+    cell.innerHTML = '';
+    if (state.showCellIds) {
+      const tag = document.createElement('div');
+      tag.className = 'cell-id-tag';
+      tag.textContent = id;
+      cell.appendChild(tag);
+    }
+    const showTerrain = state.activeTab === 'setup' || state.showTerrainTags;
+    if (showTerrain && terrain) {
+      const tag = document.createElement('div');
+      tag.className = 'terrain-tag';
+      tag.style.background = TERRAINS[terrain].color;
+      tag.textContent = TERRAINS[terrain].cost;
+      cell.appendChild(tag);
+    }
+  }
+}
+
+function renderPaths() {
+  const svg = document.getElementById('paths');
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  const cellW = 1800 / COLS_COUNT;  // 100
+  const cellH = 1300 / ROWS.length; // 100
+  for (const team of state.teams) {
+    if (!team.showPath || team.history.length < 1) continue;
+    const points = team.history.map(cellId => {
+      const p = parseCell(cellId);
+      if (!p) return null;
+      return [(p.col - 1) * cellW + cellW / 2, p.rowIdx * cellH + cellH / 2];
+    }).filter(Boolean);
+    if (points.length < 1) continue;
+
+    if (points.length >= 2) {
+      const d = points.map((p, i) => (i === 0 ? 'M' : 'L') + p[0] + ',' + p[1]).join(' ');
+      // Outer white halo for visibility
+      const halo = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      halo.setAttribute('d', d);
+      halo.setAttribute('stroke', 'rgba(255,255,255,0.85)');
+      halo.setAttribute('stroke-width', '18');
+      halo.setAttribute('fill', 'none');
+      halo.setAttribute('stroke-linecap', 'round');
+      halo.setAttribute('stroke-linejoin', 'round');
+      svg.appendChild(halo);
+
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', d);
+      path.setAttribute('stroke', team.color);
+      path.setAttribute('stroke-width', '10');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke-linecap', 'round');
+      path.setAttribute('stroke-linejoin', 'round');
+      path.setAttribute('opacity', '0.9');
+      svg.appendChild(path);
+    }
+
+    points.forEach((p, i) => {
+      const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      c.setAttribute('cx', p[0]);
+      c.setAttribute('cy', p[1]);
+      c.setAttribute('r', i === 0 || i === points.length - 1 ? 18 : 14);
+      c.setAttribute('fill', team.color);
+      c.setAttribute('stroke', 'white');
+      c.setAttribute('stroke-width', '3');
+      svg.appendChild(c);
+      const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      txt.setAttribute('x', p[0]);
+      txt.setAttribute('y', p[1]);
+      txt.setAttribute('class', 'step-num');
+      txt.textContent = i;
+      svg.appendChild(txt);
+    });
+  }
+}
+
+function renderMarkers() {
+  const markersEl = document.getElementById('markers');
+  const byCell = {};
+  for (const team of state.teams) {
+    if (!byCell[team.position]) byCell[team.position] = [];
+    byCell[team.position].push(team);
+  }
+
+  const teamIds = new Set(state.teams.map(t => 'm' + t.id));
+  for (const m of [...markersEl.querySelectorAll('.marker')]) {
+    if (!teamIds.has(m.id)) m.remove();
+  }
+
+  for (const team of state.teams) {
+    const cellList = byCell[team.position];
+    const idx = cellList.indexOf(team);
+    const parsed = parseCell(team.position);
+    if (!parsed) continue;
+
+    const cellW = 100 / COLS_COUNT;
+    const cellH = 100 / ROWS.length;
+    const left = (parsed.col - 1) / COLS_COUNT * 100 + cellW / 2;
+    const top = parsed.rowIdx / ROWS.length * 100 + cellH / 2;
+
+    const inCell = cellList.length;
+    const gridCols = Math.min(inCell, 3);
+    const gridRows = Math.ceil(inCell / gridCols);
+    const spacing = inCell === 1 ? 0 : 10;
+    const oc = idx % gridCols;
+    const orow = Math.floor(idx / gridCols);
+    const offsetX = (oc - (gridCols - 1) / 2) * spacing;
+    const offsetY = (orow - (gridRows - 1) / 2) * spacing;
+
+    let marker = document.getElementById('m' + team.id);
+    if (!marker) {
+      marker = document.createElement('div');
+      marker.id = 'm' + team.id;
+      marker.className = 'marker';
+      markersEl.appendChild(marker);
+    }
+    marker.style.backgroundColor = team.color;
+    marker.style.left = `calc(${left}% + ${offsetX}px)`;
+    marker.style.top = `calc(${top}% + ${offsetY}px)`;
+    marker.textContent = team.id;
+    marker.classList.toggle('active', team.id === state.activeTeamId);
+  }
+}
+
+function renderTeamList() {
+  const list = document.getElementById('teamList');
+  list.innerHTML = '';
+  for (const team of state.teams) {
+    const row = document.createElement('div');
+    row.className = 'team-row';
+    if (team.id === state.activeTeamId) row.classList.add('active');
+    const steps = team.history.length - 1;
+    row.innerHTML = `
+      <div class="team-color" style="background:${team.color}">${team.id}</div>
+      <div class="team-name">${team.name}</div>
+      <div class="team-stats">
+        <div class="pos">${team.position}</div>
+        <div><span class="pts-big">${team.points}</span><span class="pts-label">pts</span></div>
+        <div class="steps">${steps} ก้าว</div>
+      </div>
+      <button class="path-toggle ${team.showPath ? 'on' : ''}" title="แสดง/ซ่อนเส้นทาง">${team.showPath ? '👁' : '○'}</button>
+    `;
+    row.addEventListener('click', () => {
+      state.activeTeamId = team.id;
+      saveState();
+      renderTeamList();
+      renderMarkers();
+      renderHistory();
+      document.getElementById('teamSelect').value = team.id;
+    });
+    const pathBtn = row.querySelector('.path-toggle');
+    pathBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      team.showPath = !team.showPath;
+      saveState();
+      renderTeamList();
+      renderPaths();
+    });
+    list.appendChild(row);
+  }
+
+  const sel = document.getElementById('teamSelect');
+  sel.innerHTML = '';
+  for (const team of state.teams) {
+    const opt = document.createElement('option');
+    opt.value = team.id;
+    opt.textContent = `${team.name}  •  ${team.position}  •  ${team.points} pts`;
+    sel.appendChild(opt);
+  }
+  sel.value = state.activeTeamId;
+}
+
+function renderHistory() {
+  const el = document.getElementById('teamHistory');
+  const team = state.teams.find(t => t.id === state.activeTeamId);
+  if (!team) { el.innerHTML = ''; return; }
+  el.innerHTML = team.history.map((c, i) => {
+    const terr = state.terrain[c];
+    const cost = (i === 0 || !terr) ? '' : ` +${TERRAINS[terr].cost}`;
+    return `<span>${c}${cost}</span>`;
+  }).join(' → ');
+}
+
+function renderScoreboard() {
+  const body = document.getElementById('sbBody');
+  body.innerHTML = '';
+  const sorted = [...state.teams].sort((a, b) => {
+    if (a.points !== b.points) return a.points - b.points;
+    return (b.history.length) - (a.history.length);
+  });
+  sorted.forEach((team, i) => {
+    const row = document.createElement('div');
+    row.className = 'row' + (i === 0 ? ' winner' : '');
+    row.innerHTML = `
+      <div class="team-color" style="background:${team.color}">${team.id}</div>
+      <div class="name">${team.name} <small style="color:#aab">(${team.position})</small></div>
+      <div class="score">${team.points}</div>
+    `;
+    body.appendChild(row);
+  });
+}
+
+function renderTerrainPalette() {
+  const pal = document.getElementById('terrainPalette');
+  pal.innerHTML = '';
+  for (const key in TERRAINS) {
+    const t = TERRAINS[key];
+    const btn = document.createElement('button');
+    btn.style.background = t.color;
+    btn.innerHTML = `<div style="font-size:13px">${t.name}</div><div style="font-size:11px;opacity:0.8">${t.cost} แต้ม</div>`;
+    btn.dataset.terrain = key;
+    if (state.selectedTerrain === key) btn.classList.add('active');
+    btn.addEventListener('click', () => {
+      state.selectedTerrain = key;
+      saveState();
+      renderTerrainPalette();
+    });
+    pal.appendChild(btn);
+  }
+}
+
+function renderTeamConfig() {
+  const tc = document.getElementById('teamConfig');
+  tc.innerHTML = '';
+  for (const team of state.teams) {
+    const row = document.createElement('div');
+    row.className = 'config-team-row';
+    row.innerHTML = `
+      <div class="team-color" style="background:${team.color}">${team.id}</div>
+      <input type="text" value="${team.name}">
+      <button>ลบ</button>
+    `;
+    const input = row.querySelector('input');
+    input.addEventListener('change', (e) => {
+      team.name = e.target.value || `ทีม ${team.id}`;
+      saveState();
+      renderTeamList();
+      renderScoreboard();
+    });
+    const btn = row.querySelector('button');
+    btn.addEventListener('click', () => {
+      if (state.teams.length <= 1) { showToast('ต้องมีอย่างน้อย 1 ทีม', 'error'); return; }
+      if (!confirm(`ลบ ${team.name}?`)) return;
+      state.teams = state.teams.filter(t => t.id !== team.id);
+      if (state.activeTeamId === team.id) state.activeTeamId = state.teams[0].id;
+      const oldMarker = document.getElementById('m' + team.id);
+      if (oldMarker) oldMarker.remove();
+      saveState();
+      renderAll();
+    });
+    tc.appendChild(row);
+  }
+}
+
+function addTeam() {
+  if (state.teams.length >= 12) { showToast('สูงสุด 12 ทีม', 'error'); return; }
+  const id = state.nextTeamId++;
+  const color = TEAM_COLORS[(id - 1) % TEAM_COLORS.length];
+  state.teams.push({
+    id, name: `ทีม ${id}`, color,
+    position: START_CELL, history: [START_CELL], points: 0,
+    showPath: false,
+  });
+  saveState();
+  renderAll();
+}
+
+function renderAll() {
+  renderGrid();
+  renderPaths();
+  renderMarkers();
+  renderTeamList();
+  renderScoreboard();
+  renderTerrainPalette();
+  renderTeamConfig();
+  renderHistory();
+}
+
+let toastTimer = null;
+function showToast(msg, type = 'info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = 'toast ' + type; }, 2800);
+}
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  a.download = `game-state-${ts}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Export สำเร็จ', 'success');
+}
+function importData(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      state = { ...DEFAULT_STATE(), ...data };
+      saveState();
+      renderAll();
+      applyCalibrationUI();
+      showToast('Import สำเร็จ', 'success');
+    } catch (err) {
+      showToast('Import ผิดพลาด: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function applyCalibrationUI() {
+  for (const key of ['Top', 'Left', 'Width', 'Height']) {
+    const v = state.grid[key.toLowerCase()];
+    document.getElementById('grid' + key).value = v;
+    document.getElementById('grid' + key + 'Val').textContent = v;
+  }
+  document.getElementById('showBorders').checked = !!state.showBorders;
+  document.getElementById('showTerrainTags').checked = !!state.showTerrainTags;
+  document.getElementById('showCellIds').checked = !!state.showCellIds;
+}
+
+function setupEvents() {
+  for (const tab of document.querySelectorAll('.tab')) {
+    tab.addEventListener('click', () => {
+      state.activeTab = tab.dataset.tab;
+      for (const t of document.querySelectorAll('.tab')) t.classList.remove('active');
+      tab.classList.add('active');
+      document.getElementById('playPanel').classList.toggle('active', state.activeTab === 'play');
+      document.getElementById('setupPanel').classList.toggle('active', state.activeTab === 'setup');
+      saveState();
+      renderGrid();
+    });
+  }
+
+  document.getElementById('moveBtn').addEventListener('click', moveActiveTeam);
+  document.getElementById('cellInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); moveActiveTeam(); }
+  });
+  document.getElementById('cellInput').addEventListener('input', (e) => {
+    e.target.value = e.target.value.toUpperCase();
+    e.target.classList.remove('error');
+  });
+  document.getElementById('undoBtn').addEventListener('click', undoMove);
+  document.getElementById('resetTeamBtn').addEventListener('click', () => {
+    const team = state.teams.find(t => t.id === state.activeTeamId);
+    if (!team) return;
+    if (confirm(`รีเซ็ต ${team.name} กลับ ${START_CELL}?`)) resetTeam(team.id);
+  });
+
+  document.getElementById('teamSelect').addEventListener('change', (e) => {
+    state.activeTeamId = parseInt(e.target.value, 10);
+    saveState();
+    renderTeamList();
+    renderMarkers();
+    renderHistory();
+  });
+
+  for (const key of ['Top', 'Left', 'Width', 'Height']) {
+    const inp = document.getElementById('grid' + key);
+    inp.addEventListener('input', (e) => {
+      state.grid[key.toLowerCase()] = parseFloat(e.target.value);
+      document.getElementById('grid' + key + 'Val').textContent = e.target.value;
+      saveState();
+      applyGridSize();
+    });
+  }
+  for (const id of ['showBorders', 'showTerrainTags', 'showCellIds']) {
+    document.getElementById(id).addEventListener('change', (e) => {
+      state[id] = e.target.checked;
+      saveState();
+      renderGrid();
+    });
+  }
+
+  document.getElementById('addTeamBtn').addEventListener('click', addTeam);
+
+  document.getElementById('autoFitBtn').addEventListener('click', () => {
+    state.grid = { ...PRESET_GRID };
+    saveState();
+    applyCalibrationUI();
+    applyGridSize();
+    showToast('ใช้ค่าตำแหน่งกริดเริ่มต้นแล้ว', 'success');
+  });
+
+  document.getElementById('showAllPathsBtn').addEventListener('click', () => {
+    for (const t of state.teams) t.showPath = true;
+    saveState();
+    renderTeamList();
+    renderPaths();
+  });
+  document.getElementById('hideAllPathsBtn').addEventListener('click', () => {
+    for (const t of state.teams) t.showPath = false;
+    saveState();
+    renderTeamList();
+    renderPaths();
+  });
+
+  document.getElementById('clearTerrainBtn').addEventListener('click', () => {
+    if (confirm('ล้าง terrain ทั้งหมด?')) {
+      state.terrain = {};
+      saveState();
+      renderGrid();
+    }
+  });
+
+  document.getElementById('restoreTerrainBtn').addEventListener('click', () => {
+    state.terrain = { ...DEFAULT_TERRAIN };
+    saveState();
+    renderGrid();
+    showToast('คืนค่า terrain auto-detect แล้ว', 'success');
+  });
+
+  function resetAllTeams() {
+    if (!confirm('รีเซ็ตทุกทีมกลับ Start และล้างคะแนน?')) return;
+    for (const team of state.teams) {
+      team.position = START_CELL;
+      team.history = [START_CELL];
+      team.points = 0;
+    }
+    saveState();
+    renderAll();
+    showToast('รีเซ็ตทุกทีมเรียบร้อย', 'success');
+  }
+  document.getElementById('resetAllTeamsBtn').addEventListener('click', resetAllTeams);
+
+  document.getElementById('resetAllBtn').addEventListener('click', () => {
+    if (!confirm('ลบข้อมูลทั้งหมดและเริ่มใหม่?')) return;
+    state = DEFAULT_STATE();
+    initTeams(9);
+    saveState();
+    renderAll();
+    applyCalibrationUI();
+  });
+
+  document.getElementById('exportBtn').addEventListener('click', exportData);
+  document.getElementById('importBtn').addEventListener('click', () => {
+    document.getElementById('importFile').click();
+  });
+  document.getElementById('importFile').addEventListener('change', (e) => {
+    if (e.target.files && e.target.files[0]) importData(e.target.files[0]);
+    e.target.value = '';
+  });
+
+  document.getElementById('sbToggle').addEventListener('click', () => {
+    state.showScoreboard = !state.showScoreboard;
+    document.getElementById('liveScoreboard').classList.toggle('show', state.showScoreboard);
+    saveState();
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+    if (e.key >= '1' && e.key <= '9') {
+      const idx = parseInt(e.key, 10) - 1;
+      if (state.teams[idx]) {
+        state.activeTeamId = state.teams[idx].id;
+        saveState();
+        renderTeamList();
+        renderMarkers();
+        renderHistory();
+        document.getElementById('cellInput').focus();
+      }
+    } else if (e.key === '0') {
+      if (state.teams[9]) {
+        state.activeTeamId = state.teams[9].id;
+        saveState();
+        renderTeamList();
+        renderMarkers();
+        renderHistory();
+        document.getElementById('cellInput').focus();
+      }
+    } else if (e.key === 'u' || e.key === 'U') {
+      undoMove();
+    }
+  });
+}
+
+loadState();
+if (state.teams.length === 0) initTeams(9);
+buildGrid();
+setupEvents();
+applyCalibrationUI();
+renderAll();
+document.getElementById('liveScoreboard').classList.toggle('show', !!state.showScoreboard);
+
+const img = document.getElementById('bg');
+if (img.complete) renderMarkers();
+else img.addEventListener('load', () => renderMarkers());
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+.DS_Store
+.claude/
+error_*.png
+exam.jpg
+terrain_map.json
+node_modules/
+.env
