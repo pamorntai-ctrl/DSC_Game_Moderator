@@ -3,5 +3,7 @@
 error_*.png
 exam.jpg
 terrain_map.json
+bg2_original.jpg
+bg.jpg
 node_modules/
 .env
