@@ -711,6 +711,24 @@ function moveActiveTeam() {
   const team = state.teams.find(t => t.id === state.activeTeamId);
   if (!team) { showToast('ยังไม่ได้เลือกทีม', 'error'); return; }
 
+  // Enforce one-cell adjacent movement (8 directions)
+  const fromParsed = parseCell(team.position);
+  if (fromParsed) {
+    const dr = Math.abs(parsed.rowIdx - fromParsed.rowIdx);
+    const dc = Math.abs(parsed.col - fromParsed.col);
+    const dist = Math.max(dr, dc);
+    if (dist === 0) {
+      showToast(`${team.name} อยู่ที่ ${parsed.id} อยู่แล้ว`, 'warn');
+      input.classList.add('error');
+      return;
+    }
+    if (dist > 1) {
+      showToast(`เดินได้ทีละช่องเท่านั้น • ${team.position} → ${parsed.id} ห่างเกินไป`, 'error');
+      input.classList.add('error');
+      return;
+    }
+  }
+
   const terrain = state.terrain[parsed.id];
   const cost = terrain ? TERRAINS[terrain].cost : 0;
   team.history.push(parsed.id);
