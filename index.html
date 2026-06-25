@@ -967,7 +967,8 @@ function moveActiveTeam() {
   }
 
   const terrain = getMapTerrain()[parsed.id];
-  const cost = terrain ? TERRAINS[terrain].cost : 0;
+  const isGoal = parsed.id === getActiveMap().goalCell;
+  const cost = (isGoal || !terrain) ? 0 : TERRAINS[terrain].cost;
   team.history.push(parsed.id);
   team.position = parsed.id;
   team.points += cost;
@@ -979,7 +980,9 @@ function moveActiveTeam() {
   renderScoreboard();
   renderHistory();
 
-  if (!terrain) {
+  if (isGoal) {
+    showToast(`🏁 ${team.name} ถึง GOAL ${parsed.id}! รวม ${team.points} แต้ม (ไม่คิดคะแนน goal)`, 'success');
+  } else if (!terrain) {
     showToast(`${team.name} → ${parsed.id} (ยังไม่ตั้ง terrain, +0)`, 'warn');
   } else {
     const t = TERRAINS[terrain];
@@ -997,7 +1000,8 @@ function undoMove() {
   }
   const lastCell = team.history.pop();
   const terrain = getMapTerrain()[lastCell];
-  const cost = terrain ? TERRAINS[terrain].cost : 0;
+  const wasGoal = lastCell === getActiveMap().goalCell;
+  const cost = (wasGoal || !terrain) ? 0 : TERRAINS[terrain].cost;
   team.points = Math.max(0, team.points - cost);
   team.position = team.history[team.history.length - 1];
 
@@ -1257,9 +1261,10 @@ function renderHistory() {
   const team = state.teams.find(t => t.id === state.activeTeamId);
   if (!team) { el.innerHTML = ''; return; }
   const t = getMapTerrain();
+  const goal = getActiveMap().goalCell;
   el.innerHTML = team.history.map((c, i) => {
     const terr = t[c];
-    const cost = (i === 0 || !terr) ? '' : ` +${TERRAINS[terr].cost}`;
+    const cost = (i === 0 || !terr || c === goal) ? '' : ` +${TERRAINS[terr].cost}`;
     return `<span>${c}${cost}</span>`;
   }).join(' → ');
 }
