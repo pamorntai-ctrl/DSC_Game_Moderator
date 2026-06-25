@@ -314,6 +314,11 @@ select { margin-bottom: 10px; }
   font-size: 20px;
   line-height: 1;
 }
+.pts-hidden {
+  color: #5a6b80 !important;
+  letter-spacing: 2px;
+  font-size: 14px !important;
+}
 .team-stats .pts-label {
   color: #aab;
   font-size: 10px;
@@ -980,13 +985,19 @@ function moveActiveTeam() {
   renderScoreboard();
   renderHistory();
 
+  const hidePts = !team.showPath;
   if (isGoal) {
-    showToast(`🏁 ${team.name} ถึง GOAL ${parsed.id}! รวม ${team.points} แต้ม (ไม่คิดคะแนน goal)`, 'success');
+    const totalStr = hidePts ? '•••' : team.points;
+    showToast(`🏁 ${team.name} ถึง GOAL ${parsed.id}! รวม ${totalStr} แต้ม`, 'success');
   } else if (!terrain) {
-    showToast(`${team.name} → ${parsed.id} (ยังไม่ตั้ง terrain, +0)`, 'warn');
+    showToast(`${team.name} → ${parsed.id} (ยังไม่ตั้ง terrain)`, 'warn');
   } else {
     const t = TERRAINS[terrain];
-    showToast(`${team.name} → ${parsed.id} • ${t.name} +${cost} = ${team.points} แต้ม`, 'success');
+    if (hidePts) {
+      showToast(`${team.name} → ${parsed.id} • ${t.name}`, 'success');
+    } else {
+      showToast(`${team.name} → ${parsed.id} • ${t.name} +${cost} = ${team.points} แต้ม`, 'success');
+    }
   }
   input.value = '';
   input.focus();
@@ -1216,15 +1227,18 @@ function renderTeamList() {
     row.className = 'team-row';
     if (team.id === state.activeTeamId) row.classList.add('active');
     const steps = team.history.length - 1;
+    const ptsDisplay = team.showPath
+      ? `<span class="pts-big">${team.points}</span><span class="pts-label">pts</span>`
+      : `<span class="pts-big pts-hidden">•••</span>`;
     row.innerHTML = `
       <div class="team-color" style="background:${team.color}">${team.id}</div>
       <div class="team-name">${team.name}</div>
       <div class="team-stats">
         <div class="pos">${team.position}</div>
-        <div><span class="pts-big">${team.points}</span><span class="pts-label">pts</span></div>
+        <div>${ptsDisplay}</div>
         <div class="steps">${steps} ก้าว</div>
       </div>
-      <button class="path-toggle ${team.showPath ? 'on' : ''}" title="แสดง/ซ่อนเส้นทาง">${team.showPath ? '👁' : '○'}</button>
+      <button class="path-toggle ${team.showPath ? 'on' : ''}" title="แสดง/ซ่อนเส้นทาง+คะแนน">${team.showPath ? '👁' : '○'}</button>
     `;
     row.addEventListener('click', () => {
       state.activeTeamId = team.id;
@@ -1250,7 +1264,8 @@ function renderTeamList() {
   for (const team of state.teams) {
     const opt = document.createElement('option');
     opt.value = team.id;
-    opt.textContent = `${team.name}  •  ${team.position}  •  ${team.points} pts`;
+    const pts = team.showPath ? `${team.points} pts` : '••• pts';
+    opt.textContent = `${team.name}  •  ${team.position}  •  ${pts}`;
     sel.appendChild(opt);
   }
   sel.value = state.activeTeamId;
@@ -1262,9 +1277,10 @@ function renderHistory() {
   if (!team) { el.innerHTML = ''; return; }
   const t = getMapTerrain();
   const goal = getActiveMap().goalCell;
+  const showCost = team.showPath;
   el.innerHTML = team.history.map((c, i) => {
     const terr = t[c];
-    const cost = (i === 0 || !terr || c === goal) ? '' : ` +${TERRAINS[terr].cost}`;
+    const cost = (!showCost || i === 0 || !terr || c === goal) ? '' : ` +${TERRAINS[terr].cost}`;
     return `<span>${c}${cost}</span>`;
   }).join(' → ');
 }
@@ -1272,17 +1288,26 @@ function renderHistory() {
 function renderScoreboard() {
   const body = document.getElementById('sbBody');
   body.innerHTML = '';
-  const sorted = [...state.teams].sort((a, b) => {
+  // Teams with hidden path keep their score concealed; sort visible ones
+  // by score (asc), hidden ones to the bottom in original order.
+  const visible = state.teams.filter(t => t.showPath);
+  const hidden = state.teams.filter(t => !t.showPath);
+  visible.sort((a, b) => {
     if (a.points !== b.points) return a.points - b.points;
     return (b.history.length) - (a.history.length);
   });
+  const sorted = [...visible, ...hidden];
   sorted.forEach((team, i) => {
     const row = document.createElement('div');
-    row.className = 'row' + (i === 0 ? ' winner' : '');
+    const isWinner = team.showPath && i === 0 && visible.length > 0;
+    row.className = 'row' + (isWinner ? ' winner' : '');
+    const scoreHtml = team.showPath
+      ? `<div class="score">${team.points}</div>`
+      : `<div class="score pts-hidden">•••</div>`;
     row.innerHTML = `
       <div class="team-color" style="background:${team.color}">${team.id}</div>
       <div class="name">${team.name} <small style="color:#aab">(${team.position})</small></div>
-      <div class="score">${team.points}</div>
+      ${scoreHtml}
     `;
     body.appendChild(row);
   });
