@@ -871,7 +871,7 @@ function loadState() {
   } catch(e) {}
 }
 
-function initTeams(count = 9) {
+function initTeams(count = 10) {
   state.teams = [];
   const start = getStartCell();
   for (let i = 0; i < count; i++) {
@@ -1624,7 +1624,7 @@ function setupEvents() {
   document.getElementById('resetAllBtn').addEventListener('click', () => {
     if (!confirm('ลบข้อมูลทั้งหมดและเริ่มใหม่?')) return;
     state = DEFAULT_STATE();
-    initTeams(9);
+    initTeams(10);
     saveState();
     renderAll();
     applyCalibrationUI();
@@ -1759,7 +1759,18 @@ if (!state.maps || state.maps.length === 0) {
   state.maps = [DEFAULT_BG2_MAP()];
   state.activeMapId = 'bg2-default';
 }
-if (state.teams.length === 0) initTeams(9);
+if (state.teams.length === 0) initTeams(10);
+// Migration: top up to 10 teams if old state had fewer
+while (state.teams.length < 10) {
+  const id = state.nextTeamId++ || state.teams.length + 1;
+  if (state.nextTeamId <= id) state.nextTeamId = id + 1;
+  const start = getStartCell();
+  state.teams.push({
+    id, name: `ทีม ${id}`,
+    color: TEAM_COLORS[(id - 1) % TEAM_COLORS.length],
+    position: start, history: [start], points: 0, showPath: false,
+  });
+}
 setupEvents();
 applyCalibrationUI();
 renderAll();
