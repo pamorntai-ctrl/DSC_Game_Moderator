@@ -372,6 +372,38 @@ select { margin-bottom: 10px; }
 .terrain-palette .palette-icon svg { width: 100%; height: 100%; display: block; }
 .terrain-palette .palette-text { flex: 1; }
 
+.cost-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  margin-bottom: 4px;
+  background: #0d1b2a;
+  border-radius: 4px;
+  border-left: 4px solid transparent;
+}
+.cost-row .cost-icon {
+  width: 28px; height: 28px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.3));
+}
+.cost-row .cost-icon svg { width: 100%; height: 100%; display: block; }
+.cost-row .cost-name { flex: 1; font-size: 13px; font-weight: 600; }
+.cost-row input[type=number] {
+  width: 60px;
+  padding: 5px 6px;
+  background: #16213e;
+  border: 1px solid #0f3460;
+  color: white;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: bold;
+  text-align: center;
+}
+.cost-row input[type=number]:focus { border-color: #e94560; outline: none; }
+.cost-row .cost-unit { font-size: 11px; color: #8aa; }
+
 .calibration {
   display: flex;
   flex-direction: column;
@@ -627,6 +659,11 @@ select { margin-bottom: 10px; }
         <button id="clearTerrainBtn" style="background:#c0392b;color:white;">ล้างทั้งหมด</button>
       </div>
 
+      <h3>⚙ ปรับแต้มของ Terrain</h3>
+      <p style="font-size:12px;color:#aab;margin-bottom:6px;">แก้แต้มต่อช่องของแต่ละ terrain (กระทบทุกแผนที่)</p>
+      <div id="costEditor"></div>
+      <button class="full-btn" id="resetCostsBtn" style="margin-top:6px;background:#0f3460;">↻ คืนค่าแต้มเริ่มต้น</button>
+
       <div id="calibBlock">
       <h3>2. ปรับตำแหน่งกริด (% ของแผนที่ — เฉพาะ image map)</h3>
       <button class="full-btn" id="autoFitBtn" style="margin-bottom:8px;background:#16a085;">📐 ใช้ค่าเริ่มต้นของแผนที่</button>
@@ -832,10 +869,15 @@ const DEFAULT_BG2_MAP = () => ({
   goalCell: 'M18',
 });
 
+const DEFAULT_TERRAIN_COSTS = Object.fromEntries(
+  Object.entries(TERRAINS).map(([k, v]) => [k, v.cost])
+);
+
 const DEFAULT_STATE = () => ({
   maps: [DEFAULT_BG2_MAP()],
   activeMapId: 'bg2-default',
   teams: [],
+  terrainCosts: { ...DEFAULT_TERRAIN_COSTS },
   activeTab: 'play',
   selectedTerrain: 'plain',
   showBorders: false,
@@ -845,6 +887,13 @@ const DEFAULT_STATE = () => ({
   activeTeamId: 1,
   nextTeamId: 1,
 });
+
+function getCost(terrainKey) {
+  if (!terrainKey) return 0;
+  const overrides = state.terrainCosts || DEFAULT_TERRAIN_COSTS;
+  const v = overrides[terrainKey];
+  return Number.isFinite(v) ? v : TERRAINS[terrainKey].cost;
+}
 
 function getActiveMap() {
   let m = state.maps.find(x => x.id === state.activeMapId);
@@ -973,7 +1022,7 @@ function moveActiveTeam() {
 
   const terrain = getMapTerrain()[parsed.id];
   const isGoal = parsed.id === getActiveMap().goalCell;
-  const cost = (isGoal || !terrain) ? 0 : TERRAINS[terrain].cost;
+  const cost = (isGoal || !terrain) ? 0 : getCost(terrain);
   team.history.push(parsed.id);
   team.position = parsed.id;
   team.points += cost;
@@ -1012,7 +1061,7 @@ function undoMove() {
   const lastCell = team.history.pop();
   const terrain = getMapTerrain()[lastCell];
   const wasGoal = lastCell === getActiveMap().goalCell;
-  const cost = (wasGoal || !terrain) ? 0 : TERRAINS[terrain].cost;
+  const cost = (wasGoal || !terrain) ? 0 : getCost(terrain);
   team.points = Math.max(0, team.points - cost);
   team.position = team.history[team.history.length - 1];
 
@@ -1106,7 +1155,7 @@ function renderGrid() {
       const tag = document.createElement('div');
       tag.className = 'terrain-tag';
       tag.style.background = TERRAINS[terrain].color;
-      tag.textContent = TERRAINS[terrain].cost;
+      tag.textContent = getCost(terrain);
       cell.appendChild(tag);
     }
   }
@@ -1280,7 +1329,7 @@ function renderHistory() {
   const showCost = team.showPath;
   el.innerHTML = team.history.map((c, i) => {
     const terr = t[c];
-    const cost = (!showCost || i === 0 || !terr || c === goal) ? '' : ` +${TERRAINS[terr].cost}`;
+    const cost = (!showCost || i === 0 || !terr || c === goal) ? '' : ` +${getCost(terr)}`;
     return `<span>${c}${cost}</span>`;
   }).join(' → ');
 }
@@ -1313,6 +1362,39 @@ function renderScoreboard() {
   });
 }
 
+function renderCostEditor() {
+  const wrap = document.getElementById('costEditor');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  for (const key in TERRAINS) {
+    const t = TERRAINS[key];
+    const row = document.createElement('div');
+    row.className = 'cost-row';
+    row.style.borderLeftColor = t.color;
+    row.innerHTML = `
+      <div class="cost-icon">${t.svg}</div>
+      <div class="cost-name">${t.name}</div>
+      <input type="number" min="0" max="99" step="1" value="${getCost(key)}" data-terrain="${key}">
+      <span class="cost-unit">แต้ม</span>
+    `;
+    const inp = row.querySelector('input');
+    inp.addEventListener('change', (e) => {
+      const v = parseInt(e.target.value, 10);
+      if (!Number.isFinite(v) || v < 0) {
+        e.target.value = getCost(key);
+        return;
+      }
+      if (!state.terrainCosts) state.terrainCosts = { ...DEFAULT_TERRAIN_COSTS };
+      state.terrainCosts[key] = v;
+      saveState();
+      renderTerrainPalette();
+      renderGrid();
+      showToast(`ตั้ง ${t.name} = ${v} แต้ม`, 'success');
+    });
+    wrap.appendChild(row);
+  }
+}
+
 function renderTerrainPalette() {
   const pal = document.getElementById('terrainPalette');
   pal.innerHTML = '';
@@ -1324,7 +1406,7 @@ function renderTerrainPalette() {
       <div class="palette-icon">${t.svg}</div>
       <div class="palette-text">
         <div style="font-size:12px;font-weight:bold;">${t.name}</div>
-        <div style="font-size:11px;opacity:0.8">${t.cost} แต้ม</div>
+        <div style="font-size:11px;opacity:0.8">${getCost(key)} แต้ม</div>
       </div>
     `;
     btn.dataset.terrain = key;
@@ -1448,6 +1530,7 @@ function renderAll() {
   renderTeamList();
   renderScoreboard();
   renderTerrainPalette();
+  renderCostEditor();
   renderTeamConfig();
   renderHistory();
   renderMapManager();
@@ -1589,6 +1672,16 @@ function setupEvents() {
       saveState();
       renderGrid();
     }
+  });
+
+  document.getElementById('resetCostsBtn').addEventListener('click', () => {
+    if (!confirm('คืนค่าแต้มทุก terrain เป็นค่าเริ่มต้น?')) return;
+    state.terrainCosts = { ...DEFAULT_TERRAIN_COSTS };
+    saveState();
+    renderCostEditor();
+    renderTerrainPalette();
+    renderGrid();
+    showToast('คืนค่าแต้มเริ่มต้นแล้ว', 'success');
   });
 
   document.getElementById('restoreTerrainBtn').addEventListener('click', () => {
